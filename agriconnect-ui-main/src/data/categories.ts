@@ -1,0 +1,23 @@
+export const categories = [
+  'Agricultural Equipment',
+  'Crop Insurance',
+  'Crop Loan',
+  'Direct Benefit Transfer',
+  'Drought Relief',
+  'Farm Mechanization',
+  'Fertilizer Subsidy',
+  'Horticulture',
+  'Irrigation',
+  'Livestock',
+  'Organic Farming',
+  'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)',
+  'Pradhan Mantri Fasal Bima Yojana (PMFBY)',
+  'Rainfed Farming',
+  'Seed Subsidy',
+  'Soil Health Card',
+  'Subsidy on Pesticides',
+  'Training & Capacity Building',
+  'Weather Based Crop Insurance',
+  'Women Farmers',
+  'Youth in Agriculture'
+];
