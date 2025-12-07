@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
     sender: {
@@ -24,17 +24,19 @@ const messageSchema = new mongoose.Schema({
 });
 
 const chatSchema = new mongoose.Schema({
-    participants: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
+    participants: {
+        type: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
+        }],
         validate: [arrayLimit, 'Chat must have exactly 2 participants']
-    }],
+    },
     messages: [messageSchema],
-    lastMessage: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Message'
-    }
+    // lastMessage: {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'Message'
+    // }
 }, {
     timestamps: true
 });
@@ -49,4 +51,4 @@ chatSchema.index({ participants: 1 });
 chatSchema.index({ 'messages.sender': 1 });
 chatSchema.index({ updatedAt: -1 });
 
-module.exports = mongoose.model('Chat', chatSchema);
+export default mongoose.model('Chat', chatSchema);

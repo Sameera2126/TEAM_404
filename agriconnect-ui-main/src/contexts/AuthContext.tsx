@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User, UserRole, Language } from '@/types';
 
 interface AuthContextType {
@@ -50,9 +50,30 @@ const mockUsers: Record<UserRole, User> = {
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  // Check for stored token and user data on mount
+  const [user, setUser] = useState<User | null>(() => {
+    const token = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+    if (token && storedUser) {
+      try {
+        return JSON.parse(storedUser);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [language, setLanguage] = useState<Language>('en');
+
+  // Update localStorage when user changes
+  React.useEffect(() => {
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('user');
+    }
+  }, [user]);
 
   const login = (phone: string, role: UserRole) => {
     const mockUser = mockUsers[role];
@@ -62,6 +83,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = () => {
     setUser(null);
     setSelectedRole(null);
+    localStorage.removeItem('token');
   };
 
   return (

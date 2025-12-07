@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,43 +15,138 @@ import {
   Image as ImageIcon,
   ChevronRight,
   ChevronLeft,
+  Loader2,
 } from 'lucide-react';
-import { forumPosts, categories, crops, currentUser } from '@/data/mockData';
+import { categories, crops } from '@/data/mockData';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatDistanceToNow } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { createPost, getAllPosts, getMyPosts, ForumPost } from '@/services/forumService';
 
 const ForumPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedFilter, setSelectedFilter] = useState<string>('Recent');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<typeof forumPosts[0] | null>(null);
+  const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  
+  // Create post form state
+  const [createFormData, setCreateFormData] = useState({
+    title: '',
+    description: '',
+    category: '',
+    image: '',
+  });
 
-  const filteredPosts = forumPosts.filter((post) => {
-    // Search filter
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      let response;
+
+      if (selectedFilter === 'My Posts' && user) {
+        response = await getMyPosts({ page: 1, limit: 50 });
+      } else {
+        const params: any = {
+          page: 1,
+          limit: 50,
+        };
+
+        if (selectedCategory !== 'all') {
+          params.category = selectedCategory;
+        }
+
+        if (searchQuery && searchQuery.trim()) {
+          params.search = searchQuery.trim();
+        }
+
+        if (selectedFilter === 'Unanswered') {
+          params.isAnswered = false;
+        }
+
+        response = await getAllPosts(params);
+      }
+
+      setPosts(response.data || []);
+    } catch (error: any) {
+      console.error('Error fetching posts:', error);
+      toast.error(error.response?.data?.message || 'Failed to load posts');
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch posts from API
+  useEffect(() => {
+    fetchPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, selectedFilter]);
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPosts();
+    }, 500);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!createFormData.title || !createFormData.description || !createFormData.category) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      await createPost({
+        title: createFormData.title,
+        description: createFormData.description,
+        category: createFormData.category,
+        image: createFormData.image || undefined,
+      });
+
+      toast.success('Post created successfully!');
+      setIsCreateOpen(false);
+      setCreateFormData({ title: '', description: '', category: '', image: '' });
+      fetchPosts(); // Refresh posts
+    } catch (error: any) {
+      console.error('Error creating post:', error);
+      toast.error(error.response?.data?.message || 'Failed to create post');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const filteredPosts = posts.filter((post) => {
+    // Search filter (already handled by API, but keeping for client-side filtering if needed)
     const matchesSearch = searchQuery === '' ||
       post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.content.toLowerCase().includes(searchQuery.toLowerCase());
+      post.description.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Category filter
+    // Category filter (already handled by API)
     const matchesCategory = selectedCategory === 'all' || post.category === selectedCategory;
 
     // Additional filters
     let matchesFilter = true;
-    if (selectedFilter === 'My Posts') {
-      matchesFilter = post.author.id === currentUser.id;
-    } else if (selectedFilter === 'Unanswered') {
-      matchesFilter = !post.isAnswered;
-    } else if (selectedFilter === 'Trending') {
+    if (selectedFilter === 'Trending') {
       // Simple trending logic based on upvotes and recency
-      const daysOld = (new Date().getTime() - post.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      matchesFilter = (post.upvotes - post.downvotes) > 10 && daysOld < 7;
+      const daysOld = (new Date().getTime() - new Date(post.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+      matchesFilter = (post.upvotes.length - post.downvotes.length) > 10 && daysOld < 7;
     }
 
     return matchesSearch && matchesCategory && matchesFilter;
@@ -100,18 +195,29 @@ const ForumPage = () => {
               <DialogHeader>
                 <DialogTitle className="font-display">Create New Post</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 mt-4">
+              <form onSubmit={handleCreatePost} className="space-y-4 mt-4">
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">
-                    Title
+                    Title *
                   </label>
-                  <Input placeholder="What's your question about?" />
+                  <Input 
+                    placeholder="What's your question about?" 
+                    value={createFormData.title}
+                    onChange={(e) => setCreateFormData({ ...createFormData, title: e.target.value })}
+                    required
+                    disabled={creating}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">
-                    Category
+                    Category *
                   </label>
-                  <Select>
+                  <Select 
+                    value={createFormData.category}
+                    onValueChange={(value) => setCreateFormData({ ...createFormData, category: value })}
+                    required
+                    disabled={creating}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
@@ -124,30 +230,58 @@ const ForumPage = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">
-                    Description
+                    Description *
                   </label>
-                  <Textarea placeholder="Describe your question in detail..." className="min-h-[120px]" />
+                  <Textarea 
+                    placeholder="Describe your question in detail..." 
+                    className="min-h-[120px]"
+                    value={createFormData.description}
+                    onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
+                    required
+                    disabled={creating}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">
-                    Add Images (Optional)
+                    Image URL (Optional)
                   </label>
-                  <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                    <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Click to upload or drag images here
-                    </p>
-                  </div>
+                  <Input 
+                    placeholder="Enter image URL"
+                    value={createFormData.image}
+                    onChange={(e) => setCreateFormData({ ...createFormData, image: e.target.value })}
+                    disabled={creating}
+                  />
                 </div>
                 <div className="flex gap-3 pt-4">
-                  <Button variant="outline" className="flex-1" onClick={() => setIsCreateOpen(false)}>
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    className="flex-1" 
+                    onClick={() => {
+                      setIsCreateOpen(false);
+                      setCreateFormData({ title: '', description: '', category: '', image: '' });
+                    }}
+                    disabled={creating}
+                  >
                     Cancel
                   </Button>
-                  <Button variant="hero" className="flex-1" onClick={() => setIsCreateOpen(false)}>
-                    Post Question
+                  <Button 
+                    type="submit"
+                    variant="hero" 
+                    className="flex-1"
+                    disabled={creating}
+                  >
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Posting...
+                      </>
+                    ) : (
+                      'Post Question'
+                    )}
                   </Button>
                 </div>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         </div>
@@ -194,8 +328,13 @@ const ForumPage = () => {
         </div>
 
         {/* Posts List */}
-        <div className="space-y-4">
-          {filteredPosts.map((post, index) => (
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredPosts.map((post, index) => (
             <motion.div
               key={post.id}
               initial={{ opacity: 0, y: 20 }}
@@ -214,7 +353,7 @@ const ForumPage = () => {
                       <button className="p-2 hover:bg-muted rounded-lg transition-colors">
                         <ThumbsUp className="w-5 h-5" />
                       </button>
-                      <span className="font-semibold text-foreground">{post.upvotes - post.downvotes}</span>
+                      <span className="font-semibold text-foreground">{(post.upvotes?.length || 0) - (post.downvotes?.length || 0)}</span>
                       <button className="p-2 hover:bg-muted rounded-lg transition-colors">
                         <ThumbsDown className="w-5 h-5" />
                       </button>
@@ -238,7 +377,7 @@ const ForumPage = () => {
                       </h3>
                       <div className="mb-3">
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                          {post.content}
+                          {post.description || post.content}
                         </p>
                         <button
                           onClick={(e) => {
@@ -252,18 +391,18 @@ const ForumPage = () => {
                       </div>
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <div className="flex items-center gap-3">
-                          <span>{post.author.name}</span>
+                          <span>{post.author?.name || 'Unknown'}</span>
                           <span>•</span>
                           <span>{new Date(post.createdAt).toLocaleDateString()}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="lg:hidden flex items-center gap-1">
                             <ThumbsUp className="w-4 h-4" />
-                            {post.upvotes}
+                            {post.upvotes?.length || 0}
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />
-                            {post.commentsCount}
+                            {post.commentCount || 0}
                           </span>
                         </div>
                       </div>
@@ -273,10 +412,11 @@ const ForumPage = () => {
               </Card>
             </motion.div>
           ))}
-        </div>
+          </div>
+        )}
 
         {/* Empty State */}
-        {filteredPosts.length === 0 && (
+        {!loading && filteredPosts.length === 0 && (
           <div className="text-center py-12">
             <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No posts found</h3>
@@ -302,9 +442,9 @@ const ForumPage = () => {
                     <AvatarFallback>{selectedPost.author.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{selectedPost.author.name}</p>
+                    <p className="font-medium">{selectedPost.author?.name || 'Unknown'}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(selectedPost.createdAt, { addSuffix: true })}
+                      {formatDistanceToNow(new Date(selectedPost.createdAt), { addSuffix: true })}
                     </p>
                   </div>
                 </div>
@@ -322,23 +462,31 @@ const ForumPage = () => {
               </DialogHeader>
 
               <div className="space-y-4">
+                {selectedPost.image && (
+                  <div className="rounded-lg overflow-hidden">
+                    <img 
+                      src={selectedPost.image} 
+                      alt={selectedPost.title}
+                      className="w-full h-auto"
+                    />
+                  </div>
+                )}
                 <div className="prose max-w-none">
-                  <p className="whitespace-pre-line">{selectedPost.content}</p>
+                  <p className="whitespace-pre-line">{selectedPost.description || selectedPost.content}</p>
                 </div>
-
 
                 <div className="flex items-center gap-4 pt-4 border-t">
                   <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
                     <ThumbsUp className="w-4 h-4" />
-                    <span>{selectedPost.upvotes}</span>
+                    <span>{selectedPost.upvotes?.length || 0}</span>
                   </button>
                   <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
                     <ThumbsDown className="w-4 h-4" />
-                    <span>{selectedPost.downvotes}</span>
+                    <span>{selectedPost.downvotes?.length || 0}</span>
                   </button>
                   <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
                     <MessageSquare className="w-4 h-4" />
-                    <span>{selectedPost.commentsCount} comments</span>
+                    <span>{selectedPost.commentCount || 0} comments</span>
                   </button>
                 </div>
               </div>

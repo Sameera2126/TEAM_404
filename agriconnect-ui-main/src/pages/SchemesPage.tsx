@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,24 +16,98 @@ import {
   Bell,
   AlertTriangle,
 } from 'lucide-react';
-import { schemes, advisories, regions } from '@/data/mockData';
+import { advisories, regions } from '@/data/mockData';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchSchemes } from '@/services/schemeService';
+import { useTranslation } from '@/contexts/TranslationContext';
+import { toast } from 'sonner';
 
 const SchemesPage = () => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState<string>('all');
-  const [selectedScheme, setSelectedScheme] = useState<typeof schemes[0] | null>(null);
+  const [selectedScheme, setSelectedScheme] = useState<any>(null);
+  const [schemesList, setSchemesList] = useState<any[]>([]);
   const navigate = useNavigate();
 
-  const filteredSchemes = schemes.filter((scheme) => {
-    const matchesSearch = scheme.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      scheme.description.toLowerCase().includes(searchQuery.toLowerCase());
+  const { language, translateBatch, isTranslating } = useTranslation();
+  const [translatedSchemes, setTranslatedSchemes] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadSchemes = async () => {
+      try {
+        const data = await fetchSchemes();
+        setSchemesList(data);
+      } catch (error) {
+        console.error("Failed to load schemes");
+        toast.error("Failed to load schemes");
+      }
+    };
+    loadSchemes();
+  }, []);
+
+  // Translate schemes when language or schemesList changes
+  useEffect(() => {
+    const translateContent = async () => {
+      console.log('UseEffect triggered. Language:', language, 'Schemes count:', schemesList.length);
+
+      if (language === 'en') {
+        console.log('Language is English, skipping translation');
+        setTranslatedSchemes(schemesList);
+        return;
+      }
+
+      if (schemesList.length === 0) return;
+
+      const textsToTranslate: string[] = [];
+      const indexMap: { [key: number]: { titleIdx: number, detailsIdx: number } } = {};
+
+      schemesList.forEach((scheme, idx) => {
+        indexMap[idx] = {
+          titleIdx: textsToTranslate.length,
+          detailsIdx: textsToTranslate.length + 1
+        };
+        textsToTranslate.push(scheme.title);
+        textsToTranslate.push(scheme.details);
+      });
+
+      console.log('Sending texts to translate:', textsToTranslate.length);
+
+      try {
+        const translatedTexts = await translateBatch(textsToTranslate);
+        console.log('Received translated texts:', translatedTexts.length);
+
+        const newSchemes = schemesList.map((scheme, idx) => {
+          const indices = indexMap[idx];
+          return {
+            ...scheme,
+            title: translatedTexts[indices.titleIdx],
+            details: translatedTexts[indices.detailsIdx]
+          };
+        });
+
+        setTranslatedSchemes(newSchemes);
+      } catch (e) {
+        console.error("Translation failed", e);
+        setTranslatedSchemes(schemesList);
+      }
+    };
+
+    translateContent();
+  }, [schemesList, language, translateBatch]);
+
+  const displaySchemes = language === 'en' ? schemesList : translatedSchemes;
+
+  const filteredSchemes = Array.isArray(displaySchemes) ? displaySchemes.filter((scheme) => {
+    const matchesSearch = scheme.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      scheme.details?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesState = selectedState === 'all' || scheme.state === selectedState || scheme.state === 'All India';
     return matchesSearch && matchesState;
-  });
+  }) : [];
 
   const getSeverityStyles = (severity: string) => {
     switch (severity) {
@@ -62,13 +136,15 @@ const SchemesPage = () => {
             </h1>
             <p className="text-muted-foreground">Explore schemes and stay updated with advisories</p>
           </div>
-          <Button 
-            onClick={() => navigate('/schemes/new')}
-            className="w-full md:w-auto"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create New Scheme
-          </Button>
+          {user?.role === 'government' && (
+            <Button
+              onClick={() => navigate('/schemes/new')}
+              className="w-full md:w-auto"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create New Scheme
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="schemes">
@@ -137,7 +213,7 @@ const SchemesPage = () => {
                       </div>
                       <h3 className="font-semibold text-foreground mb-2">{scheme.title}</h3>
                       <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                        {scheme.description}
+                        {scheme.details}
                       </p>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -186,7 +262,7 @@ const SchemesPage = () => {
                   <div className="p-6 space-y-6">
                     <div>
                       <h3 className="font-semibold text-foreground mb-2">About</h3>
-                      <p className="text-muted-foreground">{selectedScheme.description}</p>
+                      <p className="text-muted-foreground">{selectedScheme.details}</p>
                     </div>
                     <div>
                       <h3 className="font-semibold text-foreground mb-2">Eligibility</h3>
@@ -199,17 +275,19 @@ const SchemesPage = () => {
                         ))}
                       </ul>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground mb-2">Benefits</h3>
-                      <ul className="space-y-2">
-                        {selectedScheme.benefits.map((item, i) => (
-                          <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                            <span className="text-primary">•</span>
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    {selectedScheme.benefits && (
+                      <div>
+                        <h3 className="font-semibold text-foreground mb-2">Benefits</h3>
+                        <ul className="space-y-2">
+                          {selectedScheme.benefits.map((item: any, i: number) => (
+                            <li key={i} className="flex items-start gap-2 text-muted-foreground">
+                              <span className="text-primary">•</span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div>
                       <h3 className="font-semibold text-foreground mb-2">How to Apply</h3>
                       <ol className="space-y-3">
@@ -244,13 +322,12 @@ const SchemesPage = () => {
                 <Card className={`border ${getSeverityStyles(advisory.severity)}`}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        advisory.severity === 'high' || advisory.severity === 'critical'
-                          ? 'bg-destructive/20'
-                          : advisory.severity === 'medium'
-                            ? 'bg-sun/20'
-                            : 'bg-secondary'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${advisory.severity === 'high' || advisory.severity === 'critical'
+                        ? 'bg-destructive/20'
+                        : advisory.severity === 'medium'
+                          ? 'bg-sun/20'
+                          : 'bg-secondary'
+                        }`}>
                         {advisory.type === 'alert' ? (
                           <AlertTriangle className="w-5 h-5" />
                         ) : (

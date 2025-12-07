@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+// models/ForumPost.js
+import mongoose from 'mongoose';
 
 const forumPostSchema = new mongoose.Schema({
     author: {
@@ -15,13 +16,36 @@ const forumPostSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Content is required']
     },
+    description: {
+        type: String,
+        required: [true, 'Description is required']
+    },
     category: {
         type: String,
-        enum: ['crop', 'pest', 'organic', 'season', 'other'],
+        enum: ['Crop Disease', 'Pest Control', 'Organic Farming', 'Irrigation', 'Soil Health', 'Harvesting', 'Seeds & Varieties', 'Fertilizers', 'Market Prices', 'Government Schemes', 'other'],
         required: true
     },
     image: {
         type: String
+    },
+    images: [{
+        type: String
+    }],
+    isAnswered: {
+        type: Boolean,
+        default: false
+    },
+    answer: {
+        content: {
+            type: String
+        },
+        expert: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        answeredAt: {
+            type: Date
+        }
     },
     upvotes: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -34,6 +58,10 @@ const forumPostSchema = new mongoose.Schema({
     tags: [{
         type: String,
         trim: true
+    }],
+    crops: [{
+        type: String,
+        trim: true
     }]
 }, {
     timestamps: true
@@ -44,6 +72,7 @@ forumPostSchema.index({ author: 1 });
 forumPostSchema.index({ category: 1 });
 forumPostSchema.index({ tags: 1 });
 forumPostSchema.index({ createdAt: -1 });
+forumPostSchema.index({ isAnswered: 1 });
 
 // Virtual for comment count
 forumPostSchema.virtual('commentCount', {
@@ -57,4 +86,6 @@ forumPostSchema.virtual('commentCount', {
 forumPostSchema.set('toJSON', { virtuals: true });
 forumPostSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('ForumPost', forumPostSchema);
+const ForumPost = mongoose.model('ForumPost', forumPostSchema);
+
+export default ForumPost;

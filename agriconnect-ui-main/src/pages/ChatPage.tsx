@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import AppLayout from '@/components/layout/AppLayout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,77 +14,179 @@ import {
   ArrowLeft,
   CheckCheck,
   User,
+  Video,
+  Lock,
+  Plus,
+  UserPlus
 } from 'lucide-react';
-import { chatThreads, mockExpert, mockFarmer } from '@/data/mockData';
-
-const mockMessages = [
-  { id: '1', senderId: mockFarmer.id, content: 'Hello, I have a question about my tomato plants', type: 'text', createdAt: new Date('2024-01-15T09:00:00'), isRead: true },
-  { id: '2', senderId: mockExpert.id, content: 'Hello! I\'d be happy to help. What seems to be the issue?', type: 'text', createdAt: new Date('2024-01-15T09:05:00'), isRead: true },
-  { id: '3', senderId: mockFarmer.id, content: 'The leaves are turning yellow and falling off. Started about a week ago.', type: 'text', createdAt: new Date('2024-01-15T09:10:00'), isRead: true },
-  { id: '4', senderId: mockExpert.id, content: 'This could be due to several reasons - overwatering, nutrient deficiency, or a fungal infection. Can you share a photo of the affected leaves?', type: 'text', createdAt: new Date('2024-01-15T09:15:00'), isRead: true },
-  { id: '5', senderId: mockFarmer.id, content: 'Sure, here is a photo', type: 'text', createdAt: new Date('2024-01-15T09:20:00'), isRead: true },
-  { id: '6', senderId: mockExpert.id, content: 'I recommend applying neem oil spray every 3 days.', type: 'text', createdAt: new Date('2024-01-15T10:30:00'), isRead: false },
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchChats, sendMessage, subscribe, fetchExperts, accessChat } from '@/services/chatService';
+import { toast } from 'sonner';
+import VideoCall from '@/components/chat/VideoCall';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const ChatPage = () => {
-  const [selectedChat, setSelectedChat] = useState<string | null>(null);
+  const { user, login } = useAuth(); // Assuming login updates user context, or we might need a setUser exposed
+  const [chats, setChats] = useState<any[]>([]);
+  const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+  const [experts, setExperts] = useState<any[]>([]);
 
-  const selectedThread = chatThreads.find((t) => t.id === selectedChat);
+  useEffect(() => {
+    if (user) {
+      loadChats();
+    }
+  }, [user]);
+
+  const loadChats = async () => {
+    try {
+      const data = await fetchChats();
+      setChats(data);
+    } catch (error) {
+      console.error("Failed to load chats", error);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || !selectedChat) return;
+
+    try {
+      const newMessage = await sendMessage(selectedChat._id, message);
+      // Update UI
+      const updatedChats = chats.map(c => {
+        if (c._id === selectedChat._id) {
+          return {
+            ...c,
+            messages: [...c.messages, newMessage],
+            lastMessage: newMessage
+          };
+        }
+        return c;
+      });
+      setChats(updatedChats);
+      setSelectedChat(updatedChats.find(c => c._id === selectedChat._id));
+      setMessage('');
+    } catch (error: any) {
+      if (error.code === 'LIMIT_REACHED') {
+        setShowSubscriptionDialog(true);
+      } else {
+        toast.error('Failed to send message');
+      }
+    }
+  };
+
+  const handleSubscribe = async () => {
+    try {
+      const updatedUser = await subscribe();
+      // Ideally update context, but for now we might need to refresh page or assume success
+      toast.success('Subscribed successfully! unrestricted chatting enabled.');
+      setShowSubscriptionDialog(false);
+      // Force a reload or update user in context if possible
+      // window.location.reload(); 
+      // Better: just assume locally for this session if context doesn't auto-update
+      if (user) user.isSubscribed = true;
+    } catch (error) {
+      toast.error('Subscription failed');
+    }
+  };
+
+  const handleVideoCall = () => {
+    if (!user?.isSubscribed && user?.role === 'farmer') {
+      setShowSubscriptionDialog(true);
+      return;
+    }
+    setInCall(true);
+  };
+
+  const handleNewChat = async () => {
+    setShowNewChatDialog(true);
+    try {
+      const data = await fetchExperts();
+      setExperts(data);
+    } catch (error) {
+      toast.error('Failed to load experts');
+    }
+  };
+
+  const startChatWithExpert = async (expertId: string) => {
+    const expert = experts.find(e => e._id === expertId);
+    try {
+      toast.info(`Connecting with ${expert?.name || 'Expert'}...`);
+      const chat = await accessChat(expertId);
+      if (!chats.find(c => c._id === chat._id)) {
+        setChats([chat, ...chats]);
+      }
+      setSelectedChat(chat);
+      setShowNewChatDialog(false);
+      toast.success(`Connected with ${expert?.name || 'Expert'}`);
+    } catch (error) {
+      toast.error('Failed to start chat');
+    }
+  };
 
   const ChatList = () => (
     <div className="h-full flex flex-col">
       {/* Search */}
-      <div className="p-4 border-b border-border">
-        <div className="relative">
+      <div className="p-4 border-b border-border flex gap-2">
+        <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <Input placeholder="Search conversations..." className="pl-12" />
         </div>
+        <Button size="icon" variant="outline" onClick={handleNewChat}>
+          <Plus className="w-5 h-5" />
+        </Button>
       </div>
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto">
-        {chatThreads.map((thread) => {
-          const otherUser = thread.participants.find((p) => p.id !== mockFarmer.id);
+        {Array.isArray(chats) && chats.map((chat) => {
+          const otherUser = chat.participants.find((p: any) => p._id !== user?.id); // adjust id check based on backend response
+          // Backend returns _id for mongo objects
+          const otherPart = chat.participants.find((p: any) => p._id !== user?.id && p._id !== user?._id);
+          const name = otherPart?.name || "Unknown User";
+
           return (
             <button
-              key={thread.id}
-              onClick={() => setSelectedChat(thread.id)}
-              className={`w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors border-b border-border/50 ${
-                selectedChat === thread.id ? 'bg-muted/50' : ''
-              }`}
+              key={chat._id}
+              onClick={() => setSelectedChat(chat)}
+              className={`w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors border-b border-border/50 ${selectedChat?._id === chat._id ? 'bg-muted/50' : ''
+                }`}
             >
               <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center flex-shrink-0">
                 <User className="w-6 h-6 text-secondary-foreground" />
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="font-semibold text-foreground">{otherUser?.name}</p>
+                  <p className="font-semibold text-foreground">{name}</p>
                   <span className="text-xs text-muted-foreground">
-                    {thread.lastMessage && new Date(thread.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {chat.lastMessage && new Date(chat.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground truncate">
-                    {thread.lastMessage?.content}
+                    {chat.lastMessage?.text || "No messages yet"}
                   </p>
-                  {thread.unreadCount > 0 && (
-                    <span className="w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
-                      {thread.unreadCount}
-                    </span>
-                  )}
                 </div>
               </div>
             </button>
           );
         })}
+        {(!Array.isArray(chats) || chats.length === 0) && (
+          <div className="p-4 text-center text-muted-foreground">
+            No conversations yet.
+          </div>
+        )}
       </div>
     </div>
   );
 
   const ChatThread = () => {
-    const otherUser = selectedThread?.participants.find((p) => p.id !== mockFarmer.id);
+    const otherPart = selectedChat?.participants.find((p: any) => p._id !== user?.id && p._id !== user?._id);
+    const name = otherPart?.name || "Unknown User";
 
     return (
       <div className="h-full flex flex-col">
@@ -98,11 +200,14 @@ const ChatPage = () => {
               <User className="w-5 h-5 text-secondary-foreground" />
             </div>
             <div>
-              <p className="font-semibold text-foreground">{otherUser?.name}</p>
+              <p className="font-semibold text-foreground">{name}</p>
               <p className="text-xs text-growth">Online</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleVideoCall}>
+              <Video className="w-5 h-5" />
+            </Button>
             <Button variant="ghost" size="icon">
               <Phone className="w-5 h-5" />
             </Button>
@@ -114,45 +219,32 @@ const ChatPage = () => {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-muted/30">
-          {mockMessages.map((msg) => {
-            const isMe = msg.senderId === mockFarmer.id;
+          {selectedChat?.messages?.map((msg: any) => {
+            const isMe = msg.sender._id === user?.id || msg.sender === user?.id || msg.sender._id === user?._id;
             return (
               <motion.div
-                key={msg.id}
+                key={msg._id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[75%] p-3 rounded-2xl ${
-                    isMe
-                      ? 'bg-primary text-primary-foreground rounded-br-md'
-                      : 'bg-card text-card-foreground rounded-bl-md shadow-soft'
-                  }`}
+                  className={`max-w-[75%] p-3 rounded-2xl ${isMe
+                    ? 'bg-primary text-primary-foreground rounded-br-md'
+                    : 'bg-card text-card-foreground rounded-bl-md shadow-soft'
+                    }`}
                 >
-                  <p className="text-sm">{msg.content}</p>
+                  <p className="text-sm">{msg.text}</p>
                   <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : ''}`}>
                     <span className={`text-xs ${isMe ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    {isMe && <CheckCheck className={`w-4 h-4 ${msg.isRead ? 'text-blue-300' : 'text-primary-foreground/50'}`} />}
+                    {isMe && <CheckCheck className={`w-4 h-4 ${msg.seen ? 'text-blue-300' : 'text-primary-foreground/50'}`} />}
                   </div>
                 </div>
               </motion.div>
             );
           })}
-
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="bg-card p-3 rounded-2xl rounded-bl-md shadow-soft">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Input */}
@@ -165,12 +257,13 @@ const ChatPage = () => {
               placeholder="Type a message..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               className="flex-1"
             />
             <Button variant="ghost" size="icon">
               <Mic className="w-5 h-5" />
             </Button>
-            <Button variant="hero" size="icon" disabled={!message.trim()}>
+            <Button variant="hero" size="icon" disabled={!message.trim()} onClick={handleSendMessage}>
               <Send className="w-5 h-5" />
             </Button>
           </div>
@@ -199,16 +292,20 @@ const ChatPage = () => {
                 <ChatThread />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-center p-8">
-                  <div>
-                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Send className="w-8 h-8 text-muted-foreground" />
+                  <div className="max-w-md">
+                    <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <UserPlus className="w-10 h-10 text-primary" />
                     </div>
-                    <h3 className="text-lg font-semibold text-foreground mb-2">
-                      Select a conversation
+                    <h3 className="text-2xl font-bold text-foreground mb-3">
+                      Connect with Agriculture Experts
                     </h3>
-                    <p className="text-muted-foreground">
-                      Choose a chat from the list to start messaging
+                    <p className="text-muted-foreground mb-8 text-lg">
+                      Get expert advice on your crops, pest control, and farming techniques. Start a conversation today.
                     </p>
+                    <Button onClick={handleNewChat} size="lg" className="gap-2 text-base px-8 h-12">
+                      <Plus className="w-5 h-5" />
+                      Find an Expert
+                    </Button>
                   </div>
                 </div>
               )}
@@ -216,6 +313,71 @@ const ChatPage = () => {
           </div>
         </Card>
       </motion.div>
+
+      <VideoCall inCall={inCall} setInCall={setInCall} />
+
+      <Dialog open={showSubscriptionDialog} onOpenChange={setShowSubscriptionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unlock Unlimited Chat & Video Calls!</DialogTitle>
+            <DialogDescription>
+              You have reached your 2-message limit. Subscribe to our premium plan to continue chatting with experts and unlock Video Calling features.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCheck className="text-green-500 w-5 h-5" />
+              <span>Unlimited Messages</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <Video className="text-green-500 w-5 h-5" />
+              <span>HD Video Calls</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Lock className="text-green-500 w-5 h-5" />
+              <span>Priority Expert Access</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSubscriptionDialog(false)}>Cancel</Button>
+            <Button onClick={handleSubscribe}>Subscribe Now</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNewChatDialog} onOpenChange={setShowNewChatDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start a New Chat</DialogTitle>
+            <DialogDescription>
+              Select an expert to start a conversation with.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto">
+            {Array.isArray(experts) && experts.length > 0 ? (
+              experts.map((expert) => (
+                <button
+                  key={expert._id}
+                  onClick={() => startChatWithExpert(expert._id)}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-muted rounded-lg transition-colors text-left"
+                >
+                  <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
+                    <User className="w-5 h-5 text-secondary-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{expert.name}</p>
+                    <p className="text-xs text-muted-foreground">{expert.role}</p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                No experts found.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

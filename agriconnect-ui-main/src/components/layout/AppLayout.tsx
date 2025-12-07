@@ -2,6 +2,7 @@ import { ReactNode, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from '@/contexts/TranslationContext';
 import { Button } from '@/components/ui/button';
 import {
   Home,
@@ -15,8 +16,6 @@ import {
   X,
   LogOut,
   HelpCircle,
-  Award,
-  Bell,
   Sprout,
 } from 'lucide-react';
 
@@ -32,7 +31,6 @@ const farmerNavItems = [
   { icon: BookOpen, label: 'Learn', path: '/knowledge' },
   { icon: FileText, label: 'Schemes', path: '/schemes' },
   { icon: Cloud, label: 'Weather', path: '/weather' },
-
   { icon: User, label: 'Profile', path: '/profile' },
 ];
 
@@ -47,8 +45,6 @@ const expertNavItems = [
 const governmentNavItems = [
   { icon: Home, label: 'Dashboard', path: '/dashboard' },
   { icon: FileText, label: 'Schemes', path: '/manage-schemes' },
-  // { icon: Bell, label: 'Advisories', path: '/manage-advisories' },
-  // { icon: Users, label: 'Forum', path: '/forum' },
   { icon: User, label: 'Profile', path: '/profile' },
 ];
 
@@ -57,6 +53,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { language, setLanguage } = useTranslation();
 
   const getNavItems = () => {
     switch (user?.role) {
@@ -92,6 +89,25 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </div>
 
+        {/* Language Selector */}
+        <div className="px-6 py-4 border-b border-border">
+          <select
+            value={language as string}
+            onChange={(e) => setLanguage(e.target.value as any)}
+            className="w-full p-2 rounded-md border border-input bg-background text-sm"
+          >
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="mr">Marathi</option>
+            <option value="gu">Gujarati</option>
+            <option value="ta">Tamil</option>
+            <option value="te">Telugu</option>
+            <option value="kn">Kannada</option>
+            <option value="pa">Punjabi</option>
+            <option value="bn">Bengali</option>
+          </select>
+        </div>
+
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
@@ -101,8 +117,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 key={item.path}
                 onClick={() => navigate(item.path)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
-                    ? 'bg-primary text-primary-foreground shadow-soft'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-soft'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
               >
                 <item.icon className="w-5 h-5" />
@@ -207,8 +223,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                         setIsSidebarOpen(false);
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
-                          ? 'bg-primary text-primary-foreground shadow-soft'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        ? 'bg-primary text-primary-foreground shadow-soft'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                         }`}
                     >
                       <item.icon className="w-5 h-5" />

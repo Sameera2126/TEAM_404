@@ -1,56 +1,55 @@
-const mongoose = require('mongoose');
-
-const userSchema = new mongoose.Schema({
+// models/User.js
+import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
+const userSchema = new mongoose.Schema(
+  {
     name: {
-        type: String,
-        required: [true, 'Please enter your name'],
-        trim: true
+      type: String,
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
     },
     phone: {
-        type: String,
-        required: [true, 'Please enter your phone number'],
-        unique: true,
-        trim: true
-    },
-    role: {
-        type: String,
-        enum: ['farmer', 'expert', 'government'],
-        default: 'farmer'
-    },
-    language: {
-        type: String,
-        enum: ['en', 'hi', 'ta', 'te'],
-        default: 'en'
-    },
-    avatar: {
-        type: String,
-        default: ''
+      type: String,
+      required: true,
     },
     location: {
-        district: String,
-        state: String
+      type: String,
+      required: true,
     },
-    crops: [{
-        type: String,
-        trim: true
-    }],
-    experienceLevel: {
-        type: String,
-        enum: ['Beginner', 'Intermediate', 'Advanced'],
-        default: 'Beginner'
+    role: {
+      type: String,
+      enum: ['farmer', 'expert', 'government', 'admin'],
+      default: 'farmer',
     },
-    verificationStatus: {
-        type: String,
-        enum: ['pending', 'verified'],
-        default: 'pending'
-    }
-}, {
-    timestamps: true
-});
+    isSubscribed: {
+      type: Boolean,
+      default: false,
+    },
+    password: {
+      type: String,
+      required: true,
+      // This ensures the password is not returned in queries unless explicitly asked for
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
 
-// Index for faster querying
-userSchema.index({ phone: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ 'location.state': 1, 'location.district': 1 });
-
-module.exports = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+// In User.js, add this before the model export
+// userSchema.pre('save', async function(next) {
+//     if (!this.isModified('password')) {
+//         return next();
+//     }
+//     const salt = await bcrypt.genSalt(10);
+//     this.password = await bcrypt.hash(this.password, salt);
+// });
+// userSchema.methods.matchPassword = async function(enteredPassword) {
+//     return await bcrypt.compare(enteredPassword, this.password);
+// }
+export default mongoose.model('User', userSchema);

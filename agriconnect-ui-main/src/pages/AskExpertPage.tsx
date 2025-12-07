@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -7,33 +7,72 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, CheckCircle, MessageCircle, Clock, X } from 'lucide-react';
-import { questions } from '@/data/mockData';
+import { MessageSquare, CheckCircle, MessageCircle, Clock, X, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { getAllPosts, answerQuestion, ForumPost } from '@/services/forumService';
 
 const AskExpertPage = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('unanswered');
-  const [selectedQuestion, setSelectedQuestion] = useState(questions[0]);
+  const [selectedQuestion, setSelectedQuestion] = useState<ForumPost | null>(null);
   const [response, setResponse] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] = useState<ForumPost[]>([]);
 
-  const unansweredQuestions = questions.filter(q => q.status === 'pending');
-  const answeredQuestions = questions.filter(q => q.status === 'answered');
+  // Fetch all questions from forum
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
 
-  const handleSubmitResponse = () => {
-    if (!response.trim()) return;
+  const fetchQuestions = async () => {
+    try {
+      setLoading(true);
+      const response = await getAllPosts({ page: 1, limit: 100 });
+      setQuestions(response.data || []);
+      
+      // Set first unanswered question as selected if available
+      const unanswered = response.data?.filter(q => !q.isAnswered);
+      if (unanswered && unanswered.length > 0 && !selectedQuestion) {
+        setSelectedQuestion(unanswered[0]);
+      } else if (response.data && response.data.length > 0 && !selectedQuestion) {
+        setSelectedQuestion(response.data[0]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching questions:', error);
+      toast.error('Failed to load questions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const unansweredQuestions = questions.filter(q => !q.isAnswered);
+  const answeredQuestions = questions.filter(q => q.isAnswered);
+
+  const handleSubmitResponse = async () => {
+    if (!response.trim() || !selectedQuestion) return;
     
-    setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
-      // Update the question status to answered
-      selectedQuestion.status = 'answered';
-      selectedQuestion.answer = response;
-      selectedQuestion.answeredAt = new Date().toISOString();
+    try {
+      setIsSubmitting(true);
+      const updatedPost = await answerQuestion(selectedQuestion._id, response);
+      
+      // Update the question in the list
+      setQuestions(prev => prev.map(q => 
+        q._id === selectedQuestion._id ? updatedPost : q
+      ));
+      
+      setSelectedQuestion(updatedPost);
       setResponse('');
-      setIsSubmitting(false);
       setActiveTab('answered');
-    }, 1000);
+      toast.success('Answer submitted successfully!');
+    } catch (error: any) {
+      console.error('Error submitting answer:', error);
+      toast.error(error.response?.data?.message || 'Failed to submit answer');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -87,9 +126,9 @@ const AskExpertPage = () => {
                     {unansweredQuestions.length > 0 ? (
                       unansweredQuestions.map((question) => (
                         <div
-                          key={question.id}
+                          key={question._id}
                           onClick={() => setSelectedQuestion(question)}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedQuestion?.id === question.id ? 'bg-muted' : 'hover:bg-muted/50'}`}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedQuestion?._id === question._id ? 'bg-muted' : 'hover:bg-muted/50'}`}
                         >
                           <div className="flex justify-between items-start">
                             <h4 className="font-medium text-sm line-clamp-2">{question.title}</h4>
@@ -100,7 +139,7 @@ const AskExpertPage = () => {
                           <div className="flex items-center justify-between mt-2">
                             <div className="flex items-center gap-2">
                               <Avatar className="w-6 h-6">
-                                <AvatarImage src={question.author?.avatar} />
+                                <AvatarImage src={question.author?.avatar || undefined} />
                                 <AvatarFallback>{(question.author?.name?.charAt(0) || 'U').toUpperCase()}</AvatarFallback>
                               </Avatar>
                               <span className="text-xs text-muted-foreground">{question.author?.name || 'Anonymous'}</span>
@@ -119,12 +158,16 @@ const AskExpertPage = () => {
                   </TabsContent>
                   
                   <TabsContent value="answered" className="m-0 p-4 space-y-3">
-                    {answeredQuestions.length > 0 ? (
+                    {loading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      </div>
+                    ) : answeredQuestions.length > 0 ? (
                       answeredQuestions.map((question) => (
                         <div
-                          key={question.id}
+                          key={question._id}
                           onClick={() => setSelectedQuestion(question)}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedQuestion?.id === question.id ? 'bg-muted' : 'hover:bg-muted/50'}`}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedQuestion?._id === question._id ? 'bg-muted' : 'hover:bg-muted/50'}`}
                         >
                           <div className="flex justify-between items-start">
                             <h4 className="font-medium text-sm line-clamp-2">{question.title}</h4>
@@ -135,13 +178,13 @@ const AskExpertPage = () => {
                           <div className="flex items-center justify-between mt-2">
                             <div className="flex items-center gap-2">
                               <Avatar className="w-6 h-6">
-                                <AvatarImage src={question.author?.avatar} />
+                                <AvatarImage src={question.author?.avatar || undefined} />
                                 <AvatarFallback>{(question.author?.name?.charAt(0) || 'U').toUpperCase()}</AvatarFallback>
                               </Avatar>
                               <span className="text-xs text-muted-foreground">{question.author?.name || 'Anonymous'}</span>
                             </div>
                             <span className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(question.answeredAt || question.createdAt), { addSuffix: true })}
+                              {formatDistanceToNow(new Date(question.answer?.answeredAt || question.createdAt), { addSuffix: true })}
                             </span>
                           </div>
                         </div>
@@ -166,8 +209,8 @@ const AskExpertPage = () => {
                 </CardTitle>
                 <CardDescription>
                   {selectedQuestion && (
-                    <Badge variant={selectedQuestion.status === 'answered' ? 'default' : 'secondary'} className="mt-1">
-                      {selectedQuestion.status === 'answered' ? 'Answered' : 'Awaiting Response'}
+                    <Badge variant={selectedQuestion.isAnswered ? 'default' : 'secondary'} className="mt-1">
+                      {selectedQuestion.isAnswered ? 'Answered' : 'Awaiting Response'}
                     </Badge>
                   )}
                 </CardDescription>
@@ -181,7 +224,7 @@ const AskExpertPage = () => {
                       <div className="space-y-4">
                         <div className="flex items-center gap-3">
                           <Avatar>
-                            <AvatarImage src={selectedQuestion.author?.avatar} />
+                            <AvatarImage src={selectedQuestion.author?.avatar || undefined} />
                             <AvatarFallback>{(selectedQuestion.author?.name?.charAt(0) || 'U').toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <div>
@@ -195,7 +238,7 @@ const AskExpertPage = () => {
                         <div>
                           <h3 className="text-lg font-semibold mb-2">{selectedQuestion.title}</h3>
                           <div className="prose prose-sm max-w-none">
-                            <p>{selectedQuestion.content}</p>
+                            <p>{selectedQuestion.description || selectedQuestion.content}</p>
                           </div>
                         </div>
                         
@@ -212,16 +255,25 @@ const AskExpertPage = () => {
                             ))}
                           </div>
                         )}
+                        {selectedQuestion.image && (
+                          <div className="mt-4 rounded-lg overflow-hidden">
+                            <img 
+                              src={selectedQuestion.image} 
+                              alt={selectedQuestion.title}
+                              className="w-full h-auto"
+                            />
+                          </div>
+                        )}
                       </div>
                       
                       {/* Existing Answer (if any) */}
-                      {selectedQuestion.status === 'answered' && selectedQuestion.answer && (
+                      {selectedQuestion.isAnswered && selectedQuestion.answer && (
                         <div className="space-y-2 pt-4 border-t">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <CheckCircle className="w-4 h-4 text-green-600" />
-                            <span>Your Response</span>
+                            <span>Expert Response</span>
                             <span className="text-xs text-muted-foreground ml-2">
-                              {formatDistanceToNow(new Date(selectedQuestion.answeredAt || selectedQuestion.createdAt), { addSuffix: true })}
+                              {formatDistanceToNow(new Date(selectedQuestion.answer.answeredAt || selectedQuestion.createdAt), { addSuffix: true })}
                             </span>
                           </div>
                           <div className="bg-muted/50 p-4 rounded-lg">
@@ -236,7 +288,7 @@ const AskExpertPage = () => {
                       )}
                       
                       {/* Response Form */}
-                      {selectedQuestion.status === 'pending' && (
+                      {!selectedQuestion.isAnswered && user?.role === 'expert' && (
                         <div className="space-y-4 pt-4 border-t">
                           <div className="space-y-2">
                             <label htmlFor="response" className="text-sm font-medium">
@@ -268,7 +320,14 @@ const AskExpertPage = () => {
                               onClick={handleSubmitResponse}
                               disabled={!response.trim() || isSubmitting}
                             >
-                              {isSubmitting ? 'Submitting...' : 'Submit Response'}
+                              {isSubmitting ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Submitting...
+                                </>
+                              ) : (
+                                'Submit Response'
+                              )}
                             </Button>
                           </div>
                         </div>

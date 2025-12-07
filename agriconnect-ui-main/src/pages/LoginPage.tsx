@@ -1,197 +1,171 @@
+// src/pages/LoginPage.tsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Phone, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+import axios from 'axios';
 import { useAuth } from '@/contexts/AuthContext';
+import { Language } from '@/types';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { selectedRole, login } = useAuth();
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [isLoading, setIsLoading] = useState(false);
+  const { setUser } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
 
-  const handlePhoneSubmit = () => {
-    if (phone.length >= 10) {
-      setIsLoading(true);
-      // Simulate OTP send
-      setTimeout(() => {
-        setIsLoading(false);
-        setStep('otp');
-      }, 1500);
-    }
+  const { email, password } = formData;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length <= 1) {
-      const newOtp = [...otp];
-      newOtp[index] = value;
-      setOtp(newOtp);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
 
-      // Auto-focus next input
-      if (value && index < 5) {
-        const nextInput = document.getElementById(`otp-${index + 1}`);
-        nextInput?.focus();
-      }
-    }
-  };
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await axios.post(`http://localhost:5000/api/auth/login`, {
+        email,
+        password
+      });
 
-  const handleOtpSubmit = () => {
-    const otpValue = otp.join('');
-    if (otpValue.length === 6 && selectedRole) {
-      setIsLoading(true);
-      // Simulate verification
-      setTimeout(() => {
-        login(phone, selectedRole);
+      if (response.data.success) {
+        // Store token in localStorage
+        localStorage.setItem('token', response.data.token);
+        
+        // Set user in AuthContext with data from API
+        const userData = response.data.user;
+        const userObject = {
+          id: userData.id,
+          name: userData.name,
+          phone: userData.phone,
+          email: userData.email,
+          role: userData.role as 'farmer' | 'expert' | 'government',
+          location: userData.location,
+          language: 'en' as Language,
+          verified: true
+        };
+        
+        // Store user in localStorage for persistence
+        localStorage.setItem('user', JSON.stringify(userObject));
+        setUser(userObject);
+
+        // Redirect based on user role
         navigate('/dashboard');
-      }, 1500);
+        toast.success('Login successful!');
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Login failed. Please try again.';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleResendOtp = () => {
-    setOtp(['', '', '', '', '', '']);
-    // Show resend animation
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col px-6 py-8">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => (step === 'otp' ? setStep('phone') : navigate('/role-select'))}
-          className="mb-8"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-      </motion.div>
-
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex-1 flex flex-col max-w-md mx-auto w-full"
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-md"
       >
-        {step === 'phone' ? (
-          <>
-            <h1 className="text-3xl font-display font-bold text-foreground mb-2">
-              Enter Phone Number
-            </h1>
-            <p className="text-muted-foreground mb-8">
-              We'll send you a verification code
-            </p>
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate('/role-select')}
+          className="mb-4"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
 
-            {/* Phone Input */}
-            <div className="relative mb-6">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 text-muted-foreground">
-                <Phone className="w-5 h-5" />
-                <span className="font-medium">+91</span>
+        {/* Login Card */}
+        <Card className="shadow-lg">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-2xl font-bold text-center">Welcome back</CardTitle>
+            <CardDescription className="text-center">
+              Enter your credentials to access your account
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="px-0 text-sm text-muted-foreground hover:text-foreground h-auto"
+                    >
+                      Forgot password?
+                    </Button>
+                  </div>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                    className="w-full"
+                  />
+                </div>
               </div>
-              <Input
-                type="tel"
-                placeholder="98765 43210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                className="pl-24 text-lg"
-                autoFocus
-              />
+
+              <Button
+                type="submit"
+                className="w-full mt-6"
+                disabled={loading}
+              >
+                {loading ? 'Signing in...' : 'Sign in'}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              Don't have an account?{' '}
+              <Button
+                variant="link"
+                className="p-0 h-auto font-medium"
+                onClick={() => navigate('/signup')}
+              >
+                Sign up
+              </Button>
             </div>
-
-            <p className="text-sm text-muted-foreground mb-8">
-              By continuing, you agree to our{' '}
-              <a href="#" className="text-primary hover:underline">
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a href="#" className="text-primary hover:underline">
-                Privacy Policy
-              </a>
-            </p>
-
-            <Button
-              variant="hero"
-              size="xl"
-              className="w-full"
-              onClick={handlePhoneSubmit}
-              disabled={phone.length < 10 || isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                'Send OTP'
-              )}
-            </Button>
-
-            {/* Help Link */}
-            <button
-              onClick={() => navigate('/forgot-number')}
-              className="mt-6 text-sm text-primary hover:underline text-center"
-            >
-              Changed your phone number?
-            </button>
-          </>
-        ) : (
-          <>
-            <h1 className="text-3xl font-display font-bold text-foreground mb-2">
-              Verify OTP
-            </h1>
-            <p className="text-muted-foreground mb-8">
-              Enter the 6-digit code sent to +91 {phone}
-            </p>
-
-            {/* OTP Input */}
-            <div className="flex gap-3 mb-6 justify-center">
-              {otp.map((digit, index) => (
-                <input
-                  key={index}
-                  id={`otp-${index}`}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(index, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Backspace' && !digit && index > 0) {
-                      const prevInput = document.getElementById(`otp-${index - 1}`);
-                      prevInput?.focus();
-                    }
-                  }}
-                  className="w-12 h-14 text-center text-xl font-semibold rounded-xl border-2 border-border bg-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  autoFocus={index === 0}
-                />
-              ))}
-            </div>
-
-            <Button
-              variant="hero"
-              size="xl"
-              className="w-full mb-4"
-              onClick={handleOtpSubmit}
-              disabled={otp.join('').length < 6 || isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                'Verify & Continue'
-              )}
-            </Button>
-
-            <button
-              onClick={handleResendOtp}
-              className="text-sm text-primary hover:underline text-center"
-            >
-              Didn't receive code? Resend
-            </button>
-          </>
-        )}
+          </CardContent>
+        </Card>
       </motion.div>
     </div>
   );

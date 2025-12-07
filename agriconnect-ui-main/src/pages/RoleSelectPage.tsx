@@ -36,7 +36,7 @@ const RoleSelectPage = () => {
 
   const handleContinue = () => {
     if (selectedRole) {
-      navigate('/login');
+      navigate('/signup');
     }
   };
 
@@ -114,7 +114,7 @@ const RoleSelectPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-8"
+          className="mt-8 space-y-3"
         >
           <Button
             variant="hero"
@@ -123,8 +123,18 @@ const RoleSelectPage = () => {
             onClick={handleContinue}
             disabled={!selectedRole}
           >
-            Continue
+            Create Account
           </Button>
+          <div className="text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <Button
+              variant="link"
+              className="p-0 h-auto font-medium"
+              onClick={() => navigate('/login')}
+            >
+              Sign in
+            </Button>
+          </div>
         </motion.div>
       </motion.div>
     </div>

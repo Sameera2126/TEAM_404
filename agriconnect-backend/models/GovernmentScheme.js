@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const governmentSchemeSchema = new mongoose.Schema({
     title: {
@@ -11,14 +11,17 @@ const governmentSchemeSchema = new mongoose.Schema({
         required: [true, 'State is required'],
         trim: true
     },
-    eligibility: {
+    eligibility: [{
         type: String,
         required: [true, 'Eligibility criteria is required']
-    },
+    }],
     details: {
         type: String,
         required: [true, 'Scheme details are required']
     },
+    benefits: [{
+        type: String
+    }],
     steps: [{
         type: String,
         required: [true, 'At least one step is required']
@@ -26,6 +29,9 @@ const governmentSchemeSchema = new mongoose.Schema({
     documentLink: {
         type: String,
         required: [true, 'Document link is required']
+    },
+    deadline: {
+        type: Date
     },
     tags: [{
         type: String,
@@ -44,4 +50,4 @@ governmentSchemeSchema.index({ title: 'text', details: 'text', tags: 'text' });
 governmentSchemeSchema.index({ state: 1, isActive: 1 });
 governmentSchemeSchema.index({ createdAt: -1 });
 
-module.exports = mongoose.model('GovernmentScheme', governmentSchemeSchema);
+export default mongoose.model('GovernmentScheme', governmentSchemeSchema);

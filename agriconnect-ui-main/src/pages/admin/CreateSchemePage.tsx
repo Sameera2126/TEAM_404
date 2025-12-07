@@ -19,6 +19,7 @@ type SchemeFormData = {
   eligibility: string[];
   benefits: string[];
   steps: string[];
+  documentLink: string;
   deadline?: string;
   isActive: boolean;
 };
@@ -35,6 +36,7 @@ const CreateSchemePage = () => {
     eligibility: [''],
     benefits: [''],
     steps: [''],
+    documentLink: '',
     isActive: true,
   });
 
@@ -75,29 +77,28 @@ const CreateSchemePage = () => {
     setIsSubmitting(true);
 
     try {
-      // Filter out empty strings from arrays
       const cleanFormData = {
-        ...formData,
+        title: formData.title,
+        state: formData.state,
+        details: formData.description,
         eligibility: formData.eligibility.filter(item => item.trim() !== ''),
         benefits: formData.benefits.filter(item => item.trim() !== ''),
         steps: formData.steps.filter(item => item.trim() !== ''),
+        documentLink: formData.documentLink,
         deadline: formData.deadline ? new Date(formData.deadline) : undefined,
-        publishedAt: new Date(),
+        tags: [formData.category],
+        isActive: formData.isActive
       };
 
-      // In a real app, you would make an API call here
-      console.log('Submitting scheme:', cleanFormData);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      const { createScheme } = await import('@/services/schemeService');
+      await createScheme(cleanFormData);
+
       toast({
         title: 'Scheme created successfully',
         description: 'The new scheme has been added to the system.',
       });
-      
-      // Redirect to schemes list
-      navigate('/manage-schemes');
+
+      navigate('/schemes');
     } catch (error) {
       console.error('Error creating scheme:', error);
       toast({
@@ -128,7 +129,7 @@ const CreateSchemePage = () => {
           </div>
           <Button
             variant="outline"
-            onClick={() => navigate('/manage-schemes')}
+            onClick={() => navigate('/schemes')}
             disabled={isSubmitting}
           >
             Cancel
@@ -164,7 +165,7 @@ const CreateSchemePage = () => {
                     id="category"
                     name="category"
                     value={formData.category}
-                    onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     required
                   >
@@ -185,7 +186,7 @@ const CreateSchemePage = () => {
                     id="state"
                     name="state"
                     value={formData.state}
-                    onChange={(e) => setFormData({...formData, state: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     required
                   >
@@ -345,13 +346,27 @@ const CreateSchemePage = () => {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="documentLink">
+                  Document Link *
+                </label>
+                <Input
+                  id="documentLink"
+                  name="documentLink"
+                  value={formData.documentLink}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/scheme-details.pdf"
+                  required
+                />
+              </div>
+
               <div className="flex items-center space-x-2 pt-4">
                 <input
                   type="checkbox"
                   id="isActive"
                   name="isActive"
                   checked={formData.isActive}
-                  onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <label htmlFor="isActive" className="text-sm font-medium">

@@ -3,7 +3,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from '@/contexts/TranslationContext';
 import { Language } from '@/types';
+import { useEffect } from 'react';
 
 const languages: { code: Language; name: string; nativeName: string }[] = [
   { code: 'en', name: 'English', nativeName: 'English' },
@@ -15,9 +17,13 @@ const languages: { code: Language; name: string; nativeName: string }[] = [
 const LanguagePage = () => {
   const navigate = useNavigate();
   const { language, setLanguage } = useAuth();
+  const { setLanguage: setTranslationLanguage } = useTranslation();
 
   const handleLanguageSelect = (lang: Language) => {
     setLanguage(lang);
+    setTranslationLanguage(lang);
+    // Trigger page translation by reloading or using translation effect
+    // The translation will happen automatically through the TranslationContext
   };
 
   const handleContinue = () => {
